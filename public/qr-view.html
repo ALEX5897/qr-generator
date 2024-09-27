@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escanear Código QR</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+</head>
+<body>
+    <h1>Escanear Código QR</h1>
+    <video id="video" width="300" height="300" autoplay></video>
+    <canvas id="qr-canvas" width="300" height="300" style="display:none;"></canvas>
+    <p id="status-message"></p>
+    <p id="qr-status" style="font-weight: bold;"></p> <!-- Etiqueta para mostrar el estado del QR -->
+    <button id="restart-btn" style="display: none;">Volver a escanear</button> <!-- Botón para reiniciar -->
+    <button id="disable-btn" style="display: none;">Inhabilitar</button> <!-- Botón para inhabilitar -->
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('qr-canvas');
+        const ctx = canvas.getContext('2d');
+        let scanning = true;
+
+        // Acceder a la cámara
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
+            video.srcObject = stream;
+        }).catch(err => {
+            console.error("Error al acceder a la cámara: ", err);
+        });
+
+        // Iniciar el escaneo automáticamente
+        function scanQRCode() {
+            if (!scanning) return; // Si ya se ha escaneado un QR, no hacer nada
+
+            // Dibujar el video en el canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+
+            if (qrCode) {
+                scanning = false; // Detener el escaneo
+                const qrData = JSON.parse(decodeURIComponent(qrCode.data)); // Decodificar y parsear
+                document.getElementById('status-message').innerText = `Código QR detectado: ${qrData.code}`;
+
+                // Buscar el estado del código QR en la API
+                fetch(`/api/qr-codes/${qrData.code}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Mostrar el estado del QR
+                        document.getElementById('qr-status').innerText = `Estado del QR: ${data.status}`;
+
+                        if (data.status === 'Habilitado') {
+                            // Mostrar botón para inhabilitar
+                            document.getElementById('disable-btn').style.display = 'inline';
+                            document.getElementById('disable-btn').onclick = () => {
+                                // Lógica para inhabilitar el QR
+                                fetch(`/api/qr-codes/${qrData.code}`, {
+                                    method: 'PATCH',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({ status: 'Inhabilitado' })
+                                }).then(response => {
+                                    if (response.ok) {
+                                        alert('Código QR inhabilitado');
+                                        document.getElementById('disable-btn').style.display = 'none'; // Ocultar botón después de inhabilitar
+                                        document.getElementById('qr-status').innerText = 'Estado del QR: Inhabilitado'; // Actualizar el estado mostrado
+                                    }
+                                });
+                            };
+                        } else {
+                            document.getElementById('disable-btn').style.display = 'none'; // Ocultar botón si no está habilitado
+                        }
+
+                        // Mostrar el botón para reiniciar
+                        document.getElementById('restart-btn').style.display = 'inline';
+                    })
+                    .catch(err => {
+                        console.error("Error al obtener el estado del QR:", err);
+                    });
+            } else {
+                requestAnimationFrame(scanQRCode); // Continuar escaneando si no se detecta
+            }
+        }
+
+        document.getElementById('restart-btn').onclick = function() {
+            scanning = true; // Reiniciar el escaneo
+            document.getElementById('status-message').innerText = ''; // Limpiar el mensaje
+            document.getElementById('qr-status').innerText = ''; // Limpiar el estado del QR
+            document.getElementById('restart-btn').style.display = 'none'; // Ocultar el botón de reinicio
+            document.getElementById('disable-btn').style.display = 'none'; // Ocultar botón de inhabilitar
+            scanQRCode(); // Iniciar escaneo
+        };
+
+        // Iniciar el escaneo automáticamente al cargar
+        scanQRCode();
+    </script>
+</body>
+</html>

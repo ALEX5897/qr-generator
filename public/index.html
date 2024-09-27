@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generar Código QR</title>
+    <style>
+        #qr-list li {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        #qr-list img {
+            width: 100px;
+            height: 100px;
+            margin-right: 10px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>Generar Código QR</h1>
+    <input type="text" id="solicitado" placeholder="Solicitado">
+    <button id="generate-qr">Generar QR</button>
+    <button id="generate-pdf" style="display: none;">Generar PDF</button> <!-- Botón para generar PDF -->
+
+    <h2>Códigos QR Generados</h2>
+    <ul id="qr-list"></ul>
+
+    <script>
+        const qrDataList = []; // Array para almacenar los datos de los QR generados
+
+        document.getElementById('generate-qr').onclick = async () => {
+            const solicitado = document.getElementById('solicitado').value;
+            const randomCode = generateRandomCode(10); // Genera un código aleatorio de 10 caracteres
+            const data = JSON.stringify({ code: randomCode, solicitado: solicitado });
+
+            const response = await fetch('/api/generate-qr', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data })
+            });
+
+            const qr = await response.json();
+            const li = document.createElement('li');
+            li.innerHTML = `<img src="${qr.qrCode}" alt="QR Code"><p>ID: ${qr.id} - Code: ${randomCode} - Solicitado: ${solicitado}</p>`;
+            document.getElementById('qr-list').appendChild(li);
+
+            // Guardar los datos del QR generado
+            qrDataList.push({ id: qr.id, code: randomCode, solicitado: solicitado, qrCode: qr.qrCode });
+
+            // Mostrar el botón para generar PDF si hay códigos QR generados
+            document.getElementById('generate-pdf').style.display = 'inline';
+        };
+
+        // Función para generar un código aleatorio
+        function generateRandomCode(length) {
+            const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * characters.length));
+            }
+            return result;
+        }
+
+        // Función para generar el PDF
+        document.getElementById('generate-pdf').onclick = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.setFontSize(20);
+            doc.text("Códigos QR Generados", 10, 10);
+            doc.setFontSize(12);
+            let yOffset = 20;
+
+            qrDataList.forEach(qrData => {
+                doc.text(`ID: ${qrData.id} - Code: ${qrData.code} - Solicitado: ${qrData.solicitado}`, 10, yOffset);
+                doc.addImage(qrData.qrCode, 'PNG', 10, yOffset + 5, 50, 50); // Ajustar el tamaño según sea necesario
+                yOffset += 60; // Espacio entre QR codes
+            });
+
+            doc.save("codigos_qr.pdf"); // Guardar el PDF
+        };
+    </script>
+</body>
+</html>
